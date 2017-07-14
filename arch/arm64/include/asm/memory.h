@@ -89,6 +89,15 @@
 #define KASAN_SHADOW_SIZE	(0)
 #endif
 
+#define THREAD_SHIFT		14
+
+#if THREAD_SHIFT >= PAGE_SHIFT
+#define THREAD_SIZE_ORDER	(THREAD_SHIFT - PAGE_SHIFT)
+#endif
+
+#define THREAD_SIZE		(UL(1) << THREAD_SHIFT)
+#define THREAD_START_SP		(THREAD_SIZE - 16)
+
 /*
  * Physical vs virtual RAM address space conversion.  These are
  * private definitions which should NOT be used outside memory.h
