@@ -15,10 +15,14 @@
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern struct range pfn_mapped[E820_X_MAX];
 
-static __init void *early_alloc(size_t size, int nid)
+static __init void *early_alloc(size_t size, int nid, bool panic)
 {
-	return memblock_virt_alloc_try_nid_nopanic(size, size,
-		__pa(MAX_DMA_ADDRESS), BOOTMEM_ALLOC_ACCESSIBLE, nid);
+	if (panic)
+		return memblock_virt_alloc_try_nid(size, size,
+			__pa(MAX_DMA_ADDRESS), BOOTMEM_ALLOC_ACCESSIBLE, nid);
+	else
+		return memblock_virt_alloc_try_nid_nopanic(size, size,
+			__pa(MAX_DMA_ADDRESS), BOOTMEM_ALLOC_ACCESSIBLE, nid);
 }
 
 static void __init kasan_populate_pmd(pmd_t *pmd, unsigned long addr,
@@ -32,14 +36,14 @@ static void __init kasan_populate_pmd(pmd_t *pmd, unsigned long addr,
 		if (boot_cpu_has(X86_FEATURE_PSE) &&
 		    ((end - addr) == PMD_SIZE) &&
 		    IS_ALIGNED(addr, PMD_SIZE)) {
-			p = early_alloc(PMD_SIZE, nid);
+			p = early_alloc(PMD_SIZE, nid, false);
 			if (p && pmd_set_huge(pmd, __pa(p), PAGE_KERNEL))
 				return;
 			else if (p)
 				memblock_free(__pa(p), PMD_SIZE);
 		}
 
-		p = early_alloc(PAGE_SIZE, nid);
+		p = early_alloc(PAGE_SIZE, nid, true);
 		pmd_populate_kernel(&init_mm, pmd, p);
 	}
 
@@ -51,7 +55,7 @@ static void __init kasan_populate_pmd(pmd_t *pmd, unsigned long addr,
 		if (!pte_none(*pte))
 			continue;
 
-		p = early_alloc(PAGE_SIZE, nid);
+		p = early_alloc(PAGE_SIZE, nid, true);
 		entry = pfn_pte(PFN_DOWN(__pa(p)), PAGE_KERNEL);
 		set_pte_at(&init_mm, addr, pte, entry);
 	} while (pte++, addr += PAGE_SIZE, addr != end);
@@ -69,14 +73,14 @@ static void __init kasan_populate_pud(pud_t *pud, unsigned long addr,
 		if (boot_cpu_has(X86_FEATURE_GBPAGES) &&
 		    ((end - addr) == PUD_SIZE) &&
 		    IS_ALIGNED(addr, PUD_SIZE)) {
-			p = early_alloc(PUD_SIZE, nid);
+			p = early_alloc(PUD_SIZE, nid, false);
 			if (p && pud_set_huge(pud, __pa(p), PAGE_KERNEL))
 				return;
 			else if (p)
 				memblock_free(__pa(p), PUD_SIZE);
 		}
 
-		p = early_alloc(PAGE_SIZE, nid);
+		p = early_alloc(PAGE_SIZE, nid, true);
 		pud_populate(&init_mm, pud, p);
 	}
 
@@ -95,7 +99,7 @@ static void __init kasan_populate_pgd(pgd_t *pgd, unsigned long addr,
 	unsigned long next;
 
 	if (pgd_none(*pgd)) {
-		void *p = early_alloc(PAGE_SIZE, nid);
+		void *p = early_alloc(PAGE_SIZE, nid, true);
 		pgd_populate(&init_mm, pgd, p);
 	}
 
