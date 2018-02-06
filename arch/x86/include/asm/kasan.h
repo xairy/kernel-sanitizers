@@ -3,6 +3,7 @@
 
 #include <linux/const.h>
 #define KASAN_SHADOW_OFFSET _AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
+#define KASAN_SHADOW_SCALE_SHIFT 3
 
 /*
  * Compiler uses shadow offset assuming that addresses start
@@ -11,9 +12,12 @@
  * 'kernel address space start' >> KASAN_SHADOW_SCALE_SHIFT
  */
 #define KASAN_SHADOW_START      (KASAN_SHADOW_OFFSET + \
-					(0xffff800000000000ULL >> 3))
+					((-1UL << __VIRTUAL_MASK_SHIFT) >> \
+						KASAN_SHADOW_SCALE_SHIFT))
 /* 47 bits for kernel address -> (47 - 3) bits for shadow */
-#define KASAN_SHADOW_END        (KASAN_SHADOW_START + (1ULL << (47 - 3)))
+#define KASAN_SHADOW_END        (KASAN_SHADOW_START + \
+					(1ULL << (__VIRTUAL_MASK_SHIFT - \
+						  KASAN_SHADOW_SCALE_SHIFT)))
 
 #ifndef __ASSEMBLY__
 
