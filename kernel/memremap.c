@@ -16,6 +16,7 @@
 #include <linux/types.h>
 #include <linux/pfn_t.h>
 #include <linux/io.h>
+#include <linux/kasan.h>
 #include <linux/mm.h>
 #include <linux/memory_hotplug.h>
 
@@ -254,6 +255,7 @@ static void devm_memremap_pages_release(struct device *dev, void *data)
 	lock_device_hotplug();
 	mem_hotplug_begin();
 	arch_remove_memory(align_start, align_size);
+	kasan_remove_zero_shadow(__va(align_start), align_size);
 	mem_hotplug_done();
 	unlock_device_hotplug();
 
@@ -367,6 +369,12 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 
 	lock_device_hotplug();
 	mem_hotplug_begin();
+	error = kasan_add_zero_shadow(__va(align_start), align_size);
+	if (error) {
+		mem_hotplug_done();
+		unlock_device_hotplug();
+		goto err_kasan;
+	}
 	error = arch_add_memory(nid, align_start, align_size, true);
 	mem_hotplug_done();
 	unlock_device_hotplug();
@@ -389,6 +397,8 @@ void *devm_memremap_pages(struct device *dev, struct resource *res,
 	return __va(res->start);
 
  err_add_memory:
+	kasan_remove_zero_shadow(__va(align_start), align_size);
+ err_kasan:
 	untrack_pfn(NULL, PHYS_PFN(align_start), align_size);
  err_pfn_remap:
  err_radix:
