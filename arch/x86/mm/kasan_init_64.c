@@ -151,7 +151,7 @@ static void __init kasan_map_early_shadow(pgd_t *pgd)
 	unsigned long end = KASAN_SHADOW_END;
 
 	for (i = pgd_index(start); start < end; i++) {
-		pgd[i] = __pgd(__pa_nodebug(kasan_zero_pud)
+		pgd[i] = __pgd(__pa_nodebug(kasan_early_shadow_pud)
 				| _KERNPG_TABLE);
 		start += PGDIR_SIZE;
 	}
@@ -177,18 +177,18 @@ static struct notifier_block kasan_die_notifier = {
 void __init kasan_early_init(void)
 {
 	int i;
-	pteval_t pte_val = __pa_nodebug(kasan_zero_page) | __PAGE_KERNEL;
-	pmdval_t pmd_val = __pa_nodebug(kasan_zero_pte) | _KERNPG_TABLE;
-	pudval_t pud_val = __pa_nodebug(kasan_zero_pmd) | _KERNPG_TABLE;
+	pteval_t pte_val = __pa_nodebug(kasan_early_shadow_page) | __PAGE_KERNEL;
+	pmdval_t pmd_val = __pa_nodebug(kasan_early_shadow_pte) | _KERNPG_TABLE;
+	pudval_t pud_val = __pa_nodebug(kasan_early_shadow_pmd) | _KERNPG_TABLE;
 
 	for (i = 0; i < PTRS_PER_PTE; i++)
-		kasan_zero_pte[i] = __pte(pte_val);
+		kasan_early_shadow_pte[i] = __pte(pte_val);
 
 	for (i = 0; i < PTRS_PER_PMD; i++)
-		kasan_zero_pmd[i] = __pmd(pmd_val);
+		kasan_early_shadow_pmd[i] = __pmd(pmd_val);
 
 	for (i = 0; i < PTRS_PER_PUD; i++)
-		kasan_zero_pud[i] = __pud(pud_val);
+		kasan_early_shadow_pud[i] = __pud(pud_val);
 
 	kasan_map_early_shadow(early_level4_pgt);
 	kasan_map_early_shadow(init_level4_pgt);
@@ -208,7 +208,7 @@ void __init kasan_init(void)
 
 	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
-	kasan_populate_zero_shadow((void *)KASAN_SHADOW_START,
+	kasan_populate_early_shadow((void *)KASAN_SHADOW_START,
 			kasan_mem_to_shadow((void *)PAGE_OFFSET));
 
 	for (i = 0; i < E820_X_MAX; i++) {
@@ -217,7 +217,7 @@ void __init kasan_init(void)
 
 		map_range(&pfn_mapped[i]);
 	}
-	kasan_populate_zero_shadow(
+	kasan_populate_early_shadow(
 		kasan_mem_to_shadow((void *)PAGE_OFFSET + MAXMEM),
 		kasan_mem_to_shadow((void *)__START_KERNEL_map));
 
@@ -225,21 +225,21 @@ void __init kasan_init(void)
 			      (unsigned long)kasan_mem_to_shadow(_end),
 			      early_pfn_to_nid(__pa(_stext)));
 
-	kasan_populate_zero_shadow(kasan_mem_to_shadow((void *)MODULES_END),
+	kasan_populate_early_shadow(kasan_mem_to_shadow((void *)MODULES_END),
 			(void *)KASAN_SHADOW_END);
 
 	load_cr3(init_level4_pgt);
 	__flush_tlb_all();
 
 	/*
-	 * kasan_zero_page has been used as early shadow memory, thus it may
-	 * contain some garbage. Now we can clear and write protect it, since
-	 * after the TLB flush no one should write to it.
+	 * kasan_early_shadow_page has been used as early shadow memory, thus
+	 * it may contain some garbage. Now we can clear and write protect it,
+	 * since after the TLB flush no one should write to it.
 	 */
-	memset(kasan_zero_page, 0, PAGE_SIZE);
+	memset(kasan_early_shadow_page, 0, PAGE_SIZE);
 	for (i = 0; i < PTRS_PER_PTE; i++) {
-		pte_t pte = __pte(__pa(kasan_zero_page) | __PAGE_KERNEL_RO);
-		set_pte(&kasan_zero_pte[i], pte);
+		pte_t pte = __pte(__pa(kasan_early_shadow_page) | __PAGE_KERNEL_RO);
+		set_pte(&kasan_early_shadow_pte[i], pte);
 	}
 	/* Flush TLBs again to be sure that write protection applied. */
 	__flush_tlb_all();
